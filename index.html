@@ -578,13 +578,13 @@ const PENDING_IMPORT = {
 
 // ── PLANNING SEMAINE ──────────────────────────────────────────────────────────
 const WEEK_PLAN = [
-  { day: 'Lun', badge: 'repos',  label: 'Repos',      note: 'grain de beauté retiré' },
+  { day: 'Lun', badge: 'repos',  label: 'Repos',      note: 'grain de beauté retiré (tempe, fils)' },
   { day: 'Mar', badge: 'a',      label: 'Séance A1',  note: 'force · routine maison le soir (sans pompes)' },
   { day: 'Mer', badge: 'b',      label: 'Séance B2',  note: 'volume' },
-  { day: 'Jeu', badge: 'boxe',   label: 'Boxe',       note: 'à confirmer · sinon fractionné 4×800 ici et B1 samedi' },
+  { day: 'Jeu', badge: 'cardio', label: 'Fractionné', note: '4×800 à 14 km/h (3\'26) · récup 2 min trottinée · piste · pas de boxe tant qu\'il y a les fils' },
   { day: 'Ven', badge: 'a',      label: 'Séance A2',  note: 'volume · routine maison complète le soir' },
-  { day: 'Sam', badge: 'cardio', label: 'Fractionné', note: '4×800 à 14 km/h (3\'26) · récup 2 min trottinée · piste' },
-  { day: 'Dim', badge: 'b',      label: 'Séance B1',  note: 'force · si le temps' },
+  { day: 'Sam', badge: 'b',      label: 'Séance B1',  note: 'force' },
+  { day: 'Dim', badge: 'repos',  label: 'Libre',      note: 'footing 25 min si le temps' },
 ];
 
 function fmtDate(iso) { const [y,m,d]=iso.split('-'); return d+'/'+m+'/'+y; }
