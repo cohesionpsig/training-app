@@ -51,7 +51,8 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .obj-text{font-size:0.85rem;line-height:1.4;color:var(--fg2);}
 .obj-text strong{color:var(--fg);font-weight:600;}
 .week-grid{display:flex;flex-direction:column;gap:6px;}
-.day-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg3);border-radius:8px;}
+.day-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;padding:8px 10px;background:var(--bg3);border-radius:8px;}
+.day-row.today{outline:1px solid var(--accent);}
 .day-label{font-family:'JetBrains Mono',monospace;font-size:0.72rem;font-weight:600;color:var(--fg3);width:26px;flex-shrink:0;}
 .day-badge{font-size:0.72rem;font-weight:600;padding:2px 8px;border-radius:4px;white-space:nowrap;}
 .badge-a{background:#1d3557;color:#60a5fa;}
@@ -59,6 +60,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .badge-cardio{background:#1a2f1a;color:#4ade80;}
 .badge-boxe{background:#2d1b1b;color:#f87171;}
 .badge-repos{background:var(--bg);color:var(--fg3);}
+.badge-jambes{background:#2d2614;color:#fbbf24;}
 .day-note{font-size:0.68rem;color:var(--fg3);margin-left:auto;}
 
 .session-card{background:var(--bg3);border-radius:10px;padding:14px;border-left:3px solid var(--accent);margin-bottom:10px;position:relative;}
@@ -577,12 +579,13 @@ const PENDING_IMPORT = {
 }; // séance B 2026-10-26 à insérer
 
 // ── PLANNING SEMAINE ──────────────────────────────────────────────────────────
+// jambes : routine maison du soir ce jour-là ('sans pompes' si séance B le lendemain, sinon 'complète')
 const WEEK_PLAN = [
   { day: 'Lun', badge: 'repos',  label: 'Repos',      note: 'grain de beauté retiré (tempe, fils)' },
-  { day: 'Mar', badge: 'a',      label: 'Séance A1',  note: 'force · routine maison le soir (sans pompes)' },
+  { day: 'Mar', badge: 'a',      label: 'Séance A1',  jambes: 'sans pompes', note: 'force · jambes le soir, sans pompes' },
   { day: 'Mer', badge: 'b',      label: 'Séance B2',  note: 'volume' },
   { day: 'Jeu', badge: 'cardio', label: 'Fractionné', note: '4×800 à 14 km/h (3\'26) · récup 2 min trottinée · piste · pas de boxe tant qu\'il y a les fils' },
-  { day: 'Ven', badge: 'a',      label: 'Séance A2',  note: 'volume · routine maison complète le soir' },
+  { day: 'Ven', badge: 'a',      label: 'Séance A2',  jambes: 'complète', note: 'volume · jambes le soir, avec pompes' },
   { day: 'Sam', badge: 'b',      label: 'Séance B1',  note: 'force' },
   { day: 'Dim', badge: 'repos',  label: 'Libre',      note: 'footing 25 min si le temps' },
 ];
@@ -701,10 +704,13 @@ function renderSessions(sessions) {
 
   const grid=document.getElementById('week-grid');
   grid.innerHTML='';
+  const todayLabel=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][new Date().getDay()];
   WEEK_PLAN.forEach(row=>{
     const div=document.createElement('div');
-    div.className='day-row';
-    div.innerHTML='<span class="day-label">'+row.day+'</span><span class="day-badge badge-'+row.badge+'">'+row.label+'</span>'+(row.note?'<span class="day-note">'+row.note+'</span>':'');
+    div.className='day-row'+(row.day===todayLabel?' today':'');
+    div.innerHTML='<span class="day-label">'+row.day+'</span><span class="day-badge badge-'+row.badge+'">'+row.label+'</span>'+
+      (row.jambes?'<span class="day-badge badge-jambes" title="Routine maison : pont fessier, abduction'+(row.jambes==='sans pompes'?'':', pompes')+'">🦵 Jambes</span>':'')+
+      (row.note?'<span class="day-note">'+row.note+'</span>':'');
     grid.appendChild(div);
   });
 }
