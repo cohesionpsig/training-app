@@ -62,6 +62,18 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .badge-repos{background:var(--bg);color:var(--fg3);}
 .badge-jambes{background:#2d2614;color:#fbbf24;}
 .day-note{font-size:0.68rem;color:var(--fg3);margin-left:auto;}
+.ana-chip{font-size:0.64rem;font-weight:700;padding:1px 6px;border-radius:10px;white-space:nowrap;border:1px solid currentColor;background:none;font-family:inherit;cursor:pointer;line-height:1.5;}
+.ana-up{color:var(--green);} .ana-stable{color:#60a5fa;} .ana-stag{color:var(--amber);} .ana-down{color:var(--red);} .ana-maint,.ana-na{color:var(--fg3);}
+.ana-note{display:none;font-size:0.7rem;color:var(--fg2);background:var(--bg2);border-radius:6px;padding:6px 8px;margin:2px 0 6px;line-height:1.45;}
+.ana-note.open{display:block;}
+.ana-sum{font-size:0.75rem;color:var(--fg2);margin-bottom:10px;}
+.ana-row{padding:8px 0;border-top:1px solid var(--border);}
+.ana-row:first-of-type{border-top:none;}
+.ana-head{display:flex;align-items:center;gap:8px;}
+.ana-name{font-size:0.8rem;font-weight:600;flex:1;min-width:0;}
+.ana-msg{font-size:0.7rem;color:var(--fg2);margin-top:3px;line-height:1.45;}
+.ana-spark{flex-shrink:0;}
+.ana-more{font-size:0.72rem;color:var(--accent);background:none;border:none;padding:6px 0 0;cursor:pointer;font-family:inherit;}
 
 .session-card{background:var(--bg3);border-radius:10px;padding:14px;border-left:3px solid var(--accent);margin-bottom:10px;position:relative;}
 .session-card:last-child{margin-bottom:0;}
@@ -168,6 +180,11 @@ textarea{resize:vertical;min-height:72px;}
   <div class="card">
     <div class="card-title">Dernière séance</div>
     <div id="last-session-container"><div class="empty-state">Chargement…</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Tendances par exercice</div>
+    <div id="ana-container"><div class="empty-state">Chargement…</div></div>
   </div>
 
   <div class="card">
@@ -653,6 +670,112 @@ function perfTrend(s,i){
   return '';
 }
 
+// ── TENDANCE GLOBALE PAR EXO (toutes les séances) ───────────────────────────
+// Force estimée = meilleure série, formule d'Epley : charge × (1 + reps/30) → compare 5×6 lourd et 4×12 léger
+//   (poids du corps : total de reps). Volume = Σ charge × reps.
+// Moyenne récente = médiane des 3 dernières séances vs médiane des 3 d'avant (une séance ratée isolée ne compte pas).
+// États : record / progrès (vert) · stable (bleu) · stagne (ambre : aucun progrès depuis ≥ 4 séances et ≥ 14 j)
+//         baisse (rouge) · entretien (tendons, gris) · début (< 3 séances)
+const ANA_MAINT=['Curl excentrique','Isométrique coude 90°','Pronation/supination'];
+const ANA_NOTE={'Tirage horizontal':'Machine au max (100 lb) : la progression passe par la pause et le tempo, que ce calcul ne voit pas.'};
+const ANA_LABEL={up:'progrès',rec:'record',stable:'stable',stag:'stagne',down:'baisse',maint:'entretien',na:'début'};
+function e1rm(w,r){return w*(1+Math.min(r,30)/30);}
+function anaPoint(p){
+  const m=perfMode(p); if(!m)return null;
+  if(m==='reps'){const v=p.s.reduce((a,x)=>a+x.r,0);return {m,f:v,vol:v,w:0};}
+  return {m,f:Math.max(...p.s.map(x=>e1rm(x.w,x.r))),vol:p.s.reduce((a,x)=>a+x.w*x.r,0),w:perfMax(p)};
+}
+function anaSeries(name,upto){
+  const pts=[];
+  [...ALL_SESSIONS].filter(s=>Array.isArray(s.perf)&&(!upto||s.date<=upto))
+    .sort((a,b)=>a.date.localeCompare(b.date)).forEach(s=>{
+      const p=s.perf.find(x=>x&&x.n===name); const q=p&&anaPoint(p);
+      if(q)pts.push(Object.assign(q,{date:s.date}));
+    });
+  if(!pts.length)return pts;
+  const m=pts[pts.length-1].m;
+  return pts.filter(x=>x.m===m);
+}
+function median(a){const b=[...a].sort((x,y)=>x-y),k=b.length>>1;return b.length%2?b[k]:(b[k-1]+b[k])/2;}
+function pct(x){const v=Math.round(x*100);return (v>0?'+':v<0?'−':'±')+Math.abs(v)+' %';}
+function daysBetween(a,b){return Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/864e5);}
+function exoAnalysis(name,upto){
+  const pts=anaSeries(name,upto), n=pts.length;
+  const res={name,pts,n,status:'na',msg:''};
+  if(ANA_MAINT.includes(name)){res.status='maint';res.msg='Exo tendons : on garde la même charge, la régularité compte plus que la progression.';return res;}
+  if(n<3){res.status='na';res.msg='Encore '+(3-n)+' séance'+(3-n>1?'s':'')+' avant de pouvoir dégager une tendance.';return res;}
+  const last=pts[n-1], prevPts=pts.slice(0,-1);
+  const k=Math.min(3,Math.ceil(n/2));
+  const recent=pts.slice(-k), before=pts.slice(Math.max(0,n-k-3),n-k);
+  const tF=median(recent.map(p=>p.f))/median(before.map(p=>p.f))-1;
+  const tV=median(recent.map(p=>p.vol))/median(before.map(p=>p.vol))-1;
+  const since=median(recent.map(p=>p.f))/pts[0].f-1;
+  const sinceV=median(recent.map(p=>p.vol))/pts[0].vol-1;
+  const maxF=Math.max(...prevPts.map(p=>p.f)), maxV=Math.max(...prevPts.map(p=>p.vol)), maxW=Math.max(...prevPts.map(p=>p.w));
+  const recF=last.f>maxF*1.005, recV=last.vol>maxV*1.02, recW=last.w>maxW+0.05;
+  // dernier progrès : dernière séance qui a battu le meilleur précédent (force ou volume)
+  let lastProg=0,bf=pts[0].f,bv=pts[0].vol,bw=pts[0].w;
+  for(let i=1;i<n;i++){if(pts[i].f>bf*1.005||pts[i].vol>bv*1.02||pts[i].w>bw+0.05)lastProg=i;bf=Math.max(bf,pts[i].f);bv=Math.max(bv,pts[i].vol);bw=Math.max(bw,pts[i].w);}
+  const ago=n-1-lastProg, agoDays=daysBetween(pts[lastProg].date,last.date);
+  const startTxt=(Math.abs(since)>=0.01?pct(since):pct(sinceV)+' en volume')+' depuis le début';
+  const lowerThanPrev=last.f<pts[n-2].f*0.98||last.vol<pts[n-2].vol*0.95;
+  const betterThanPrev=!lowerThanPrev&&(last.f>pts[n-2].f*1.005||last.vol>pts[n-2].vol*1.02||last.w>pts[n-2].w+0.05);
+  const lastSince=last.f/pts[0].f-1;
+  const note=ANA_NOTE[name]?' '+ANA_NOTE[name]:'';
+  if(recF||recV){
+    res.status='rec';
+    res.msg=(recF?'Record de force estimée':'Record de volume')+' sur cet exo ('+pct(lastSince)+' depuis le début).';
+  }else if(recW){
+    res.status='up';
+    res.msg='Nouvelle charge max (+'+fmtKg(last.w-maxW)+' kg). La force estimée suit en général quelques séances plus tard, le temps de remonter les reps.';
+  }else if(tF>=0.02||(Math.abs(tF)<0.02&&tV>=0.05)){
+    res.status='up';
+    res.msg=(lowerThanPrev?'Un peu en dessous de la dernière fois, mais la tendance reste bonne : ':'')+
+      'moyenne récente '+pct(tF>=0.02?tF:tV)+(tF>=0.02?'':' en volume')+', '+startTxt+'.';
+  }else if(tF<=-0.03||(Math.abs(tF)<0.02&&tV<=-0.08)){
+    res.status='down';
+    res.msg=(betterThanPrev?'Mieux que la dernière fois, mais la ':'La ')+'moyenne récente reste en dessous des séances d\'avant ('+pct(tF<=-0.03?tF:tV)+(tF<=-0.03?'':' en volume')+') : au moins 2 séances plus basses. Vérifie sommeil, repas et fatigue ; si ça continue, on allège.'+note;
+  }else if(ago>=4&&agoDays>=14){
+    res.status='stag';
+    res.msg='Aucun progrès depuis '+ago+' séances ('+agoDays+' jours). Pour relancer : +1 rep, tempo plus lent ou charge supérieure.'+note;
+  }else{
+    res.status='stable';
+    res.msg=(lowerThanPrev?'Un peu en dessous de la dernière fois, rien d\'inquiétant : ':'')+'moyenne récente stable ('+pct(tF)+'), dernier progrès '+(ago===0?'à cette séance':'il y a '+ago+' séance'+(ago>1?'s':''))+', '+startTxt+'.'+note;
+  }
+  return res;
+}
+function anaChip(a,idx){
+  const cls=a.status==='rec'?'up':a.status;
+  return '<button type="button" class="ana-chip ana-'+cls+'" data-ana="'+idx+'">'+ANA_LABEL[a.status]+'</button>';
+}
+function sparkSvg(pts){
+  const v=pts.slice(-10).map(p=>p.f); if(v.length<2)return '';
+  const W=64,H=18,mn=Math.min(...v),mx=Math.max(...v),rg=(mx-mn)||1;
+  const xy=v.map((y,i)=>[(i*(W-4)/(v.length-1)+2).toFixed(1),(H-2-(y-mn)/rg*(H-4)).toFixed(1)]);
+  const last=xy[xy.length-1];
+  return '<svg class="ana-spark" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" points="'+xy.map(p=>p.join(',')).join(' ')+'"/><circle cx="'+last[0]+'" cy="'+last[1]+'" r="2" fill="currentColor"/></svg>';
+}
+const ANA_ORDER={down:0,stag:1,stable:2,up:3,rec:3,na:4,maint:5};
+function renderAnalysis(){
+  const el=document.getElementById('ana-container'); if(!el)return;
+  const today=isoToday(), from=new Date(today+'T12:00:00'); from.setDate(from.getDate()-30);
+  const fromIso=from.toISOString().slice(0,10);
+  const names=[...new Set(ALL_SESSIONS.filter(s=>s.date>=fromIso&&Array.isArray(s.perf)).flatMap(s=>s.perf.filter(Boolean).map(p=>p.n)))];
+  const list=names.map(n=>exoAnalysis(n)).filter(a=>a.n>0).sort((a,b)=>ANA_ORDER[a.status]-ANA_ORDER[b.status]||a.name.localeCompare(b.name));
+  if(!list.length){el.innerHTML='<div class="empty-state">Pas encore de données.</div>';return;}
+  const c=st=>list.filter(a=>st.includes(a.status)).length;
+  const sum='<div class="ana-sum">'+c(['up','rec'])+' en progrès · '+c(['stable'])+' stable'+(c(['stable'])>1?'s':'')+' · <strong style="color:'+(c(['stag','down'])?'var(--amber)':'var(--fg2)')+'">'+c(['stag','down'])+' à surveiller</strong> <span style="color:var(--fg3)">(exos des 30 derniers jours)</span></div>';
+  const rows=list.map((a,i)=>{
+    const cls=a.status==='rec'?'up':a.status;
+    return '<div class="ana-row'+(i>=6?' ana-extra':'')+'"'+(i>=6?' style="display:none"':'')+'><div class="ana-head"><span class="ana-name">'+a.name+'</span><span class="ana-'+cls+'">'+sparkSvg(a.pts)+'</span><span class="ana-chip ana-'+cls+'" style="cursor:default">'+ANA_LABEL[a.status]+'</span></div><div class="ana-msg">'+a.msg+'</div></div>';
+  }).join('');
+  const more=list.length>6?'<button type="button" class="ana-more">Voir les '+(list.length-6)+' autres exos ▾</button>':'';
+  const legend='<div class="exo-note-block" style="margin-top:8px">Force estimée sur ta meilleure série (charge × reps), volume total, médiane des 3 dernières séances vs les 3 d\'avant. Une séance ratée isolée ne fait pas basculer la tendance.</div>';
+  el.innerHTML=sum+rows+more+legend;
+  const btn=el.querySelector('.ana-more');
+  if(btn)btn.addEventListener('click',()=>{el.querySelectorAll('.ana-extra').forEach(r=>r.style.display='');btn.remove();});
+}
+
 function mkSessionCard(s, deletable) {
   const div=document.createElement('div');
   div.className='session-card type-'+s.type;
@@ -661,12 +784,19 @@ function mkSessionCard(s, deletable) {
     if(!e)return '';
     const t=perfTrend(s,i);
     if(t)hasTrend=true;
-    return '<div class="exo-row"><span class="exo-name">'+e+'</span>'+t+'</div>';
+    const p=Array.isArray(s.perf)?s.perf[i]:null;
+    const a=p&&perfMode(p)?exoAnalysis(p.n,s.date):null;
+    const chip=a?anaChip(a,i):'';
+    const note=a?'<div class="ana-note" data-ana-note="'+i+'"><strong>Tendance au '+fmtDate(s.date)+' :</strong> '+a.msg+'</div>':'';
+    return '<div class="exo-row"><span class="exo-name">'+e+'</span>'+t+chip+'</div>'+note;
   }).join('');
-  const legendHtml=hasTrend?'<div class="exo-note-block" style="margin-top:8px">▲ mieux / ▼ moins bien que la séance précédente du même type'+(s.v?' ('+s.v+')':'')+' : charge max d\'abord (kg), sinon charge × reps (%)</div>':'';
+  const legendHtml=hasTrend?'<div class="exo-note-block" style="margin-top:8px">▲ mieux / ▼ moins bien que la séance précédente du même type'+(s.v?' ('+s.v+')':'')+' : charge max d\'abord (kg), sinon charge × reps (%). Pastille = tendance sur toutes les séances (touche-la pour le détail).</div>':'';
   const notesHtml=s.notes?'<div class="exo-note-block" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">'+s.notes+'</div>':'';
   const delHtml=deletable?'<button class="del-btn" title="Supprimer">🗑</button>':'';
   div.innerHTML=delHtml+'<div class="session-header"><span class="session-name">'+typeName(s.type,s.v)+'</span><span class="session-date">'+fmtDate(s.date)+'</span></div>'+exosHtml+legendHtml+notesHtml;
+  div.querySelectorAll('.ana-chip[data-ana]').forEach(b=>b.addEventListener('click',()=>{
+    const n=div.querySelector('[data-ana-note="'+b.dataset.ana+'"]'); if(n)n.classList.toggle('open');
+  }));
   if(deletable){
     div.querySelector('.del-btn').addEventListener('click',async()=>{
       if(!confirm('Supprimer cette séance ?'))return;
@@ -701,6 +831,8 @@ function renderSessions(sessions) {
   histEl.innerHTML='';
   if(!sessions.length){histEl.innerHTML='<div class="empty-state">Aucune séance enregistrée.<br>Appuie sur <strong>+</strong> pour en ajouter une.</div>';}
   else{[...sessions].sort((a,b)=>b.date.localeCompare(a.date)).forEach(s=>histEl.appendChild(mkSessionCard(s,true)));}
+
+  renderAnalysis();
 
   const grid=document.getElementById('week-grid');
   grid.innerHTML='';
